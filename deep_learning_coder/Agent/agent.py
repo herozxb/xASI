@@ -10,17 +10,38 @@ class SimpleAgent:
     def addition_tool(self, a, b):
         return a + b
 
+    # The tool function that performs subtraction
+    def subtraction_tool(self, a, b):
+        return a - b
+
+    # The tool function that performs multiplication
+    def multiplication_tool(self, a, b):
+        return a * b
+
+    # The tool function that performs division
+    def division_tool(self, a, b):
+        if b != 0:
+            return a / b
+        else:
+            return "Error: Division by zero"
+
     # The method where the agent reacts to inputs and uses the tool when necessary
     def react(self, input_text):
-        # Define the agent's prompt to use the addition tool or other reasoning tasks
+        # Define the agent's prompt to use the tools or other reasoning tasks
         prompt = f"""
         You are a coding assistant. You will reason through tasks and use the appropriate tools when necessary.
 
-        # Tool Function:
+        # Tool Functions:
         addition_tool(a, b)  # This function takes two arguments and returns their sum.
+        subtraction_tool(a, b)  # This function takes two arguments and returns their difference.
+        multiplication_tool(a, b)  # This function takes two arguments and returns their product.
+        division_tool(a, b)  # This function takes two arguments and returns their division (handling zero division).
 
-        # Example task:
+        # Example tasks:
         Add 5 and 7.
+        Subtract 5 from 7.
+        Multiply 5 and 7.
+        Divide 10 by 2.
 
         Task:
         {input_text}
@@ -31,28 +52,50 @@ class SimpleAgent:
         # Call the Ollama model directly for reasoning
         response = ollama.chat(model=self.model_name, messages=[{"role": "user", "content": prompt}])
         
-        # Extracting the response content to find if the model mentions addition tool
+        # Extract the response content to find if the model asks to perform any tool operation
         response_content = response['message']['content']
-        
         print(f"Response from model: {response_content}")
-        print("===========llm_response===========")
-        
-        # Look for pattern in the response to see if it asks to perform addition
-        match = re.search(r'addition_tool\((\d+), (\d+)\)', response_content)
-        if match:
-            print("===========use_tools[0]===========")
-            a = int(match.group(1))  # First number
-            b = int(match.group(2))  # Second number
-            result = self.addition_tool(a, b)  # Perform the actual addition
-            
-            return result  # Return the result of addition
 
-        # If the model doesn't specifically call the addition tool, return the model's response
+        # Look for pattern in the response to see if it asks to perform any operation
+        match_add = re.search(r'addition_tool\((\d+), (\d+)\)', response_content)
+        match_sub = re.search(r'subtraction_tool\((\d+), (\d+)\)', response_content)
+        match_mul = re.search(r'multiplication_tool\((\d+), (\d+)\)', response_content)
+        match_div = re.search(r'division_tool\((\d+), (\d+)\)', response_content)
+
+        if match_add:
+            print("===============use_addition_tools[0]==================")
+            a = int(match_add.group(1))
+            b = int(match_add.group(2))
+            result = self.addition_tool(a, b)
+            return result
+
+        elif match_sub:
+            print("===============use_substraction_tools[1]==================")
+            a = int(match_sub.group(1))
+            b = int(match_sub.group(2))
+            result = self.subtraction_tool(a, b)
+            return result
+
+        elif match_mul:
+            print("===============use_multiplication_tools[2]==================")
+            a = int(match_mul.group(1))
+            b = int(match_mul.group(2))
+            result = self.multiplication_tool(a, b)
+            return result
+
+        elif match_div:
+            print("===============use_division_tools[3]==================")
+            a = int(match_div.group(1))
+            b = int(match_div.group(2))
+            result = self.division_tool(a, b)
+            return result
+
+        # If the model doesn't specifically call any tool, return the reasoning content
         return response_content
 
-    # The agent's main logic to perform addition or other tasks
+    # The agent's main logic to perform tasks
     def perform_task(self, task_description):
-        # Here we simply send the task to the LLM to let it decide
+        # Here we simply send the task to the LLM to let it decide which tool to use
         result = self.react(task_description)
         return result
 
@@ -60,10 +103,21 @@ class SimpleAgent:
 # Initialize the agent with the DeepSeek-Coder v2 model
 agent = SimpleAgent("deepseek-coder-v2")
 
-# Example task input for addition
-task = "Please add 3 and 7."
+# Example task input for each operation
+task_add = "Please add 3 and 7."
+task_sub = "Please subtract 3 from 7."
+task_mul = "Please multiply 3 and 7."
+task_div = "Please divide 10 by 2."
 
-# The agent reacts to the task and provides the result
-result = agent.perform_task(task)
-print(f"Result: {result}")
+# The agent reacts to each task and provides the result
+result_add = agent.perform_task(task_add)
+result_sub = agent.perform_task(task_sub)
+result_mul = agent.perform_task(task_mul)
+result_div = agent.perform_task(task_div)
+
+# Print the results
+print(f"Addition Result: {result_add}")
+print(f"Subtraction Result: {result_sub}")
+print(f"Multiplication Result: {result_mul}")
+print(f"Division Result: {result_div}")
 
