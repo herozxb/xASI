@@ -8,7 +8,7 @@ import numpy as np
 
 device       = torch.device("cpu")
 
-model_name = "/home/deep/.cache/modelscope/hub/models/LLM-Research/Meta-Llama-3.1-8B"  # adjust to your path
+model_name = "/Users/xibozhang/.cache/modelscope/hub/models/LLM-Research/Meta-Llama-3___1-8B"  # adjust to your path
 
 model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
 model.eval()
@@ -46,29 +46,32 @@ next_tokens = []
 
 for text in texts:
     inputs = tokenizer(text, return_tensors="pt").to(device)
+    print(text)
     with torch.no_grad():
-        outputs = model.model(**inputs)  # Get transformer output
-        hidden = outputs.last_hidden_state  # [1, seq_len, hidden_dim]
+        outputs = model(**inputs, output_hidden_states=True, return_dict=True)
 
-        # Mean pooling of hidden states
-        attention_mask = inputs['attention_mask'].unsqueeze(-1)
+        hidden = outputs.hidden_states[-1]   # last layer hidden states
+        logits = outputs.logits
+
+        # mean pooling with attention mask
+        attention_mask = inputs["attention_mask"].unsqueeze(-1)  # [1, seq, 1]
         masked_hidden = hidden * attention_mask
         sum_hidden = masked_hidden.sum(dim=1)
-        lengths = attention_mask.sum(dim=1)
-        sentence_embedding = sum_hidden / lengths  # [1, hidden_dim]
-        embeddings.append(sentence_embedding.squeeze().numpy())
+        lengths = attention_mask.sum(dim=1).clamp(min=1)         # avoid div0
+        sentence_embedding = sum_hidden / lengths                # [1, hidden_dim]
 
-        # Predict next token
-        logits = model(**inputs).logits  # [1, seq_len, vocab]
-        next_token_logits = logits[0, -1]  # last token's output
-        predicted_id = next_token_logits.argmax().item()
-        predicted_token = tokenizer.decode(predicted_id)
-        next_tokens.append(predicted_token)
+        embeddings.append(sentence_embedding.squeeze(0).detach().cpu().numpy())
+
+        # next-token prediction
+        next_token_logits = logits[0, -1]
+        predicted_id = int(next_token_logits.argmax())
+        next_tokens.append(tokenizer.decode([predicted_id]))
 
 
 
 # ——— t-SNE to 2D ———
 tsne = TSNE(n_components=2, perplexity=min(5, len(texts)-1), random_state=42)
+
 embeddings_2d = tsne.fit_transform(np.stack(embeddings))
 
 print("===============2=============")
@@ -80,8 +83,9 @@ from matplotlib import cm
 
 # Create unique label set and mapping
 unique_labels = sorted(set(next_tokens))  # ensure consistent order
-label_to_index = {label: idx for idx, label in enumerate(unique_labels)}
-y = np.array([label_to_index[token] for token in next_tokens])  # class indices
+
+#label_to_index = {label: idx for idx, label in enumerate(unique_labels)}
+#y = np.array([label_to_index[token] for token in next_tokens])  # class indices
 
 # ——— Encode labels for classification ———
 label_to_index = {label: idx for idx, label in enumerate(unique_labels)}
@@ -93,10 +97,12 @@ clf.fit(embeddings_2d, y)
 
 # ——— Generate decision boundary mesh ———
 h = 0.3  # step size in the mesh
+
 x_min, x_max = embeddings_2d[:, 0].min() - 1, embeddings_2d[:, 0].max() + 1
 y_min, y_max = embeddings_2d[:, 1].min() - 1, embeddings_2d[:, 1].max() + 1
-xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                     np.arange(y_min, y_max, h))
+
+xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+
 Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
 Z = Z.reshape(xx.shape)
 
@@ -104,15 +110,19 @@ print("===============3=============")
 
 # ——— Plot decision boundaries ———
 plt.figure(figsize=(12, 8))
+
 cmap = ListedColormap(cm.get_cmap("tab10").colors[:len(unique_labels)])
+
 plt.contourf(xx, yy, Z, alpha=0.2, cmap=cmap)
 
 print("===============4=============")
 
 # ——— Plot points again ———
 for i, (x, y_pt) in enumerate(embeddings_2d):
+
     label = next_tokens[i]
     color_idx = label_to_index[label]
+    
     plt.scatter(x, y_pt, color=cmap(color_idx), label=label if label not in next_tokens[:i] else "")
     plt.text(x + 0.5, y_pt, texts[i], fontsize=8)
 
@@ -124,6 +134,10 @@ plt.ylabel("t-SNE dim 2")
 plt.legend(title="Predicted Next Token")
 plt.grid(True)
 plt.tight_layout()
+
+# Saving the plot
+plt.savefig('plot_output.png')
+
 plt.show()
 
 
