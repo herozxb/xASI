@@ -1,0 +1,1 @@
+# 1 the gpt is for the 1D sequence of trillion of tokens of word
